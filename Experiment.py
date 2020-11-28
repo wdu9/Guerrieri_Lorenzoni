@@ -8,11 +8,11 @@ import numpy as np
 from builtins import str
 from builtins import range
 from builtins import object
-from HARK import HARKobject, AgentType, NullFunc
+from HARK import HARKobject, AgentType, NullFunc 
 from scipy.io import loadmat
 from HARK.interpolation import  LinearInterp
-import math as mp
 from copy import copy, deepcopy
+from HARK.utilities import getArgNames, NullFunc
 
 
 class GLConsumerSolution(HARKobject):
@@ -114,91 +114,91 @@ class GLsolver(HARKobject):
             B=B,
         
         )
-         
-    #load the income process 
-    Matlabdict = loadmat('inc_process.mat')
-    data = list(Matlabdict.items())
-    data_array=np.asarray(data)
-    x=data_array[3,1]
-    Pr=data_array[4,1]
-    pr = data_array[5,1]
-
-    theta = np.concatenate((np.array([1e-10]).reshape(1,1),np.exp(x).reshape(1,12)),axis=1).reshape(13,1)
-    fin   = 0.8820    #job-finding probability
-    sep   = 0.0573    #separation probability
-    cmin= 1e-6  # lower bound on consumption 
-
-
-
-    #constructing transition Matrix
-    G=np.array([1-fin]).reshape(1,1)
-    A = np.concatenate((G, fin*pr), axis=1)
-    B= sep**np.ones(12).reshape(12,1)
-    D=np.concatenate((B,np.multiply((1-sep),Pr)),axis=1)
-    Pr = np.concatenate((A,D))
-
-
-    # find new invariate distribution
-    pr = np.concatenate([np.array([0]).reshape(1,1), pr],axis=1)
-
-    dif = 1
-    while dif > 1e-5:
-        pri = pr.dot(Pr)
-        dif = np.amax(np.absolute(pri-pr))
-        pr  = pri
-
+    def mkCpol(self):    
+        #load the income process 
+        Matlabdict = loadmat('inc_process.mat')
+        data = list(Matlabdict.items())
+        data_array=np.asarray(data)
+        x=data_array[3,1]
+        Pr=data_array[4,1]
+        pr = data_array[5,1]
     
-    fac = ((pssi / theta)** (1/eta)).reshape(13,1)  
-    
-    tau = (nu*pr[0,0] + (Rfree-1)/(Rfree)*B) / (1 - pr[0,0]) # labor tax
-    
-    z  = np.insert(-tau*np.ones(12),0,nu).T
-         
-         
-         
-    
-    #this needs to be specified differently to incorporate choice of phi and interest rate
-    Matlabcl=loadmat('cl')
-    cldata=list(Matlabcl.items())
-    cldata=np.array(cldata)
-    cl=cldata[3,1].reshape(13,1)
-    print(cl)
-
-    Cnext = self.solution_next.Cpol
-    
-    """ Will change Cguess to Cnext later... (look below)"""
-    phi= D1_4Y * NE * 2
-    expUtil= np.dot(Pr,(Cnext**(-CRRA)))
-    print(expUtil)
-    Cnow=[]
-    Nnow=[]
-    Bnow=[]
-    Cnowpol=[]
-    
-    #unconstrained
-    for i in range(13):
-        Cnow.append ( np.array(((Rfree) * DiscFac) * (expUtil[i] **(-1/CRRA)))) #euler equation
-        Nnow.append(np.array(np.maximum((1 - fac[i]*((Cnow[i])**(CRRA / eta))),0))) #labor supply FOC
-        Bnow.append(np.array(Bgrid[0] / (Rfree) + Cnow[i] - theta[i]**Nnow[i] - z[i])) #Budget Constraint
+        theta = np.concatenate((np.array([1e-10]).reshape(1,1),np.exp(x).reshape(1,12)),axis=1).reshape(13,1)
+        fin   = 0.8820    #job-finding probability
+        sep   = 0.0573    #separation probability
+        cmin= 1e-6  # lower bound on consumption 
         
-        #constrained, constructing c pts between -phi and Bnow[i][0]  
-        if Bnow[i][0] > -phi:
-            c_c = np.linspace(cl[i,0], Cnow[i][0], 100)
-            n_c = np.maximum(1 - fac[i]*(c_c**gameta),0)  # labor supply
-            b_c = -phi/Rfree + c_c - theta[i]**n_c - z[i] # budget
-            Bnow[i] = np.concatenate( [b_c[0:98], Bnow[i]])
-            Cnow[i] = np.concatenate([c_c[0:98], Cnow[i]])
-            
-            
-        Cnowpol.append( LinearInterp(Bnow[i], Cnow[i]))
         
-    Cnowpol=np.array(Cnowpol).reshape(13,1)
-    Cpol=[]
-    for i in range(13):
-        Cpol.append(Cnowpol[i,0].y_list)
-    Cpol = np.array(Cpol)
-    print(Cpol)
+        
+        #constructing transition Matrix
+        G=np.array([1-fin]).reshape(1,1)
+        A = np.concatenate((G, fin*pr), axis=1)
+        B= sep**np.ones(12).reshape(12,1)
+        D=np.concatenate((B,np.multiply((1-sep),Pr)),axis=1)
+        Pr = np.concatenate((A,D))
+        
+        
+        # find new invariate distribution
+        pr = np.concatenate([np.array([0]).reshape(1,1), pr],axis=1)
+        
+        dif = 1
+        while dif > 1e-5:
+            pri = pr.dot(Pr)
+            dif = np.amax(np.absolute(pri-pr))
+            pr  = pri
+        
+            
+        fac = ((pssi / theta)** (1/eta)).reshape(13,1)  
+            
+        tau = (nu*pr[0,0] + (Rfree-1)/(Rfree)*B) / (1 - pr[0,0]) # labor tax
+            
+        z  = np.insert(-tau*np.ones(12),0,nu).T
+                 
+                 
+                 
+            
+            #this needs to be specified differently to incorporate choice of phi and interest rate
+        Matlabcl=loadmat('cl')
+        cldata=list(Matlabcl.items())
+        cldata=np.array(cldata)
+        cl=cldata[3,1].reshape(13,1)
+        print(cl)
+        
+        Cnext = self.solution_next.Cpol
+            
     
+        phi= D1_4Y * NE * 2
+        expUtil= np.dot(Pr,(Cnext**(-CRRA)))
+        print(expUtil)
+        Cnow=[]
+        Nnow=[]
+        Bnow=[]
+        Cnowpol=[]
+            
+            #unconstrained
+        for i in range(13):
+            Cnow.append ( np.array(((Rfree) * DiscFac) * (expUtil[i] **(-1/CRRA)))) #euler equation
+            Nnow.append(np.array(np.maximum((1 - fac[i]*((Cnow[i])**(CRRA / eta))),0))) #labor supply FOC
+            Bnow.append(np.array(Bgrid[0] / (Rfree) + Cnow[i] - theta[i]**Nnow[i] - z[i])) #Budget Constraint
+                
+            #constrained, constructing c pts between -phi and Bnow[i][0]  
+            if Bnow[i][0] > -phi:
+                c_c = np.linspace(cl[i,0], Cnow[i][0], 100)
+                n_c = np.maximum(1 - fac[i]*(c_c**gameta),0)  # labor supply
+                b_c = -phi/Rfree + c_c - theta[i]**n_c - z[i] # budget
+                Bnow[i] = np.concatenate( [b_c[0:98], Bnow[i]])
+                Cnow[i] = np.concatenate([c_c[0:98], Cnow[i]])
+                
+                    
+            Cnowpol.append( LinearInterp(Bnow[i], Cnow[i]))
+                
+        Cnowpol=np.array(Cnowpol).reshape(13,1)
+        Cpol=[]
+        for i in range(13):
+            Cpol.append(Cnowpol[i,0].y_list)
+        Cpol = np.array(Cpol)
+        print(Cpol)
+        
     
     def solve(self):
         """
@@ -243,54 +243,66 @@ init_GL = {
 }
     
 class GLconsType(AgentType):
+   
+    
+    def makeOnePeriodOOSolver(solver_class):
+        def onePeriodSolver(**kwds):
+            solver = solver_class(**kwds)
+
+            # not ideal; better if this is defined in all Solver classes
+            if hasattr(solver, "prepareToSolve"):
+                solver.prepareToSolve()
+
+            solution_now = solver.solve()
+            return solution_now
+
+        onePeriodSolver.solver_class = solver_class
+    # This can be revisited once it is possible to export parameters
+        onePeriodSolver.solver_args = getArgNames(solver_class.__init__)[1:]
+
+        return onePeriodSolver
     
     
-    Matlabgrid=loadmat('Bgrid')
-    griddata=list(Matlabgrid.items())
-    datagrid_array=np.array(griddata)
-    print(datagrid_array[3,1])
-    Bgrid_uc=datagrid_array[3,1]
     
     
-    time_vary_ = ["LivPrb", "PermGroFac"]
-    time_inv_ = ["CRRA", "Rfree", "DiscFac", "MaxKinks", "BoroCnstArt"]
-    state_vars = ['pLvlNow', 'PlvlAggNow', 'bNrmNow', 'mNrmNow', "aNrmNow"]
-    shock_vars_ = []
 
     def __init__(self, cycles=0, verbose=1, quiet=False, **kwds):
-        """
-        Instantiate a new consumer type with given data.
-        See init_GL for a dictionary of
-        the keywords that should be passed to the constructor.
-        Parameters
-        ----------
-        cycles : int
-            Number of times the sequence of periods should be solved.
-        Returns
-        -------
-        None
-        """
-
-        params = init_GL.copy()
-        params.update(kwds)
-        kwds = params
+        self.time_vary = []
+        self.time_inv = ["CRRA", "Rfree", "DiscFac", "pssi", "phi"]
+        self.state_vars = []
+        self.shock_vars = []
+        cmin= 1e-6  # lower bound on consumption
         
+         
+
+        Matlabgrid=loadmat('Bgrid')
+        griddata=list(Matlabgrid.items())
+        datagrid_array=np.array(griddata)
+        print(datagrid_array[3,1])
+        Bgrid_uc=datagrid_array[3,1]
+    
+        params = init_GL.copy()
+        #params.update(kwds)
+        kwds = params
+        print(kwds)
         #setup grid based on constraint phi
         Bgrid=[]
         for i in range(200):
             if Bgrid_uc[0,i] > phi:
                 Bgrid.append(Bgrid_uc[0,i])
-        Bgrid = Bgrid.reshape(1,len(Bgrid))
+        Bgrid = np.array(Bgrid).reshape(1,len(Bgrid))
 
     #initial Guess for Cpolicy
         Cguess = np.maximum(Rfree*np.ones(13).reshape(13,1).dot(Bgrid),cmin)
-         # Define some universal values for all consumer types
-        cPol_terminal_ = Cguess  
-        solution_terminal_ = GLConsumerSolution(Cnext=Cguess)
+        # Define some universal values for all consumer types
+         
+        solution_terminal_ = GLConsumerSolution(
+                Cpol=Cguess,
+                )
         
         AgentType.__init__(
         self,
-            solution_terminal=deepcopy(self.solution_terminal_),
+            solution_terminal=deepcopy(solution_terminal_),
             cycles=cycles,
             pseudo_terminal=False,
             **kwds
@@ -299,12 +311,14 @@ class GLconsType(AgentType):
         self.verbose = verbose
         self.quiet = quiet
         self.solveOnePeriod = makeOnePeriodOOSolver(GLsolver)
-        set_verbosity_level((4 - verbose) * 10)
+        #set_verbosity_level((4 - verbose) * 10)
         
         
 #-------------------------------------------------------------------------------
         
 example = GLconsType(**init_GL)
+example.solve()
+
         
         
    
