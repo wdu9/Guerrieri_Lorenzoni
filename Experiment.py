@@ -51,7 +51,7 @@ class GLConsumerSolution(HARKobject):
         The constructor for a new GLConsumerSolution object.
         Parameters
         ----------
-        Cnext : Array
+        Cpol : Array
             Consumption Policy from next period. 13 by 200 array 
         Cfuncs : Array
             13 by 1 Array whose elements are objects of the 'LinearInterp' Class. 
@@ -179,7 +179,20 @@ class GLsolver(HARKobject):
         cldata=list(Matlabcl.items())
         cldata=np.array(cldata)
         cl=cldata[3,1].reshape(13,1)
-        print(cl)
+        # print(cl)
+        Matlabgrid=loadmat('Bgrid')
+        griddata=list(Matlabgrid.items())
+        datagrid_array=np.array(griddata)
+        print(datagrid_array[3,1])
+        Bgrid_uc=datagrid_array[3,1]
+    
+        #setup grid based on constraint phi
+        Bgrid=[]
+        for i in range(200):
+            if Bgrid_uc[0,i] > self.phi:
+                Bgrid.append(Bgrid_uc[0,i])
+        Bgrid = np.array(Bgrid).reshape(1,len(Bgrid))
+        
         
         Cnext = self.solution_next.Cpol
             
@@ -190,7 +203,7 @@ class GLsolver(HARKobject):
         Cnow=[]
         Nnow=[]
         Bnow=[]
-        Cnowpol=[]
+        self.Cnowpol=[]
             
             #unconstrained
         for i in range(13):
@@ -207,13 +220,13 @@ class GLsolver(HARKobject):
                 Cnow[i] = np.concatenate([c_c[0:98], Cnow[i]])
                 
                     
-            Cnowpol.append( LinearInterp(Bnow[i], Cnow[i]))
+            self.Cnowpol.append( LinearInterp(Bnow[i], Cnow[i]))
                 
-        Cnowpol=np.array(Cnowpol).reshape(13,1)
-        Cpol=[]
+        self.Cnowpol=np.array(self.Cnowpol).reshape(13,1)
+        self.Cpol=[]
         for i in range(13):
-            Cpol.append(Cnowpol[i,0].y_list)
-        Cpol = np.array(Cpol)
+            self.Cpol.append(self.Cnowpol[i,0].y_list)
+        self.Cpol = np.array(self.Cpol)
         print(Cpol)
         
     
@@ -228,6 +241,7 @@ class GLsolver(HARKobject):
         solution : GLConsumerSolution
             The solution to this period's problem.
         """
+        self.mkCpol()
         solution = GLConsumerSolution(
             cFuncs=self.CnowPol,
             Cpol=self.Cpol,
