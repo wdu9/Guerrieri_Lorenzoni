@@ -8,27 +8,27 @@ import numpy as np
 from builtins import str
 from builtins import range
 from builtins import object
-from HARK import HARKobject, AgentType, NullFunc 
+from HARK import AgentType, NullFunc, HARKobject, makeOnePeriodOOSolver
 from scipy.io import loadmat
 from HARK.interpolation import  LinearInterp
 from copy import copy, deepcopy
 from HARK.utilities import getArgNames, NullFunc
 
 
-def makeOnePeriodOOSolver(solver_class):
-    def onePeriodSolver(**kwds):
-        solver = solver_class(**kwds)
+#def makeOnePeriodOOSolver(solver_class):
+    #def onePeriodSolver(**kwds):
+        #solver = solver_class(**kwds)
         # not ideal; better if this is defined in all Solver classes
-        if hasattr(solver, "prepareToSolve"):
-            solver.prepareToSolve()
-            solution_now = solver.solve()
-        return solution_now
+        #if hasattr(solver, "prepareToSolve"):
+            #solver.prepareToSolve()
+            #solution_now = solver.solve()
+        #return solution_now
 
-        onePeriodSolver.solver_class = solver_class
+        #onePeriodSolver.solver_class = solver_class
     # This can be revisited once it is possible to export parameters
-        onePeriodSolver.solver_args = getArgNames(solver_class.__init__)[1:]
+        #onePeriodSolver.solver_args = getArgNames(solver_class.__init__)[1:]
 
-        return onePeriodSolver
+        #return onePeriodSolver
     
 
 
