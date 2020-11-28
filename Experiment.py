@@ -15,6 +15,23 @@ from copy import copy, deepcopy
 from HARK.utilities import getArgNames, NullFunc
 
 
+def makeOnePeriodOOSolver(solver_class):
+    def onePeriodSolver(**kwds):
+        solver = solver_class(**kwds)
+        # not ideal; better if this is defined in all Solver classes
+        if hasattr(solver, "prepareToSolve"):
+            solver.prepareToSolve()
+            solution_now = solver.solve()
+        return solution_now
+
+        onePeriodSolver.solver_class = solver_class
+    # This can be revisited once it is possible to export parameters
+        onePeriodSolver.solver_args = getArgNames(solver_class.__init__)[1:]
+
+        return onePeriodSolver
+    
+
+
 class GLConsumerSolution(HARKobject):
     """
     A class representing the solution of a single period of a GL
@@ -104,13 +121,13 @@ class GLsolver(HARKobject):
     ):
         self.assignParameters(
             solution_next=solution_next,
-            DiscFac=DiscFac,
             CRRA=CRRA,
             Rfree=Rfree,
+            DiscFac=DiscFac,
+            phi=phi,
             eta=eta,
             nu=nu,
             pssi=pssi,
-            phi=phi,
             B=B,
         
         )
@@ -231,44 +248,24 @@ init_GL = {
     'nu': .16000,
     'pssi': 18.154609,
     'B': 2.56,
-    'MaxKinks': 400,      # Maximum number of grid points to allow in cFunc (should be large)
-    'AgentCount': 10000,  # Number of agents of this type (only matters for simulation)
-    'aNrmInitMean' : 0.0, # Mean of log initial assets (only matters for simulation)
-    'aNrmInitStd' : 1.0,  # Standard deviation of log initial assets (only for simulation)
-    'pLvlInitMean' : 0.0, # Mean of log initial permanent income (only matters for simulation)
-    'pLvlInitStd' : 0.0,  # Standard deviation of log initial permanent income (only matters for simulation)
-    'PermGroFacAgg' : 1.0,# Aggregate permanent income growth factor: portion of PermGroFac attributable to aggregate productivity growth (only matters for simulation)
-    'T_age' : None,       # Age after which simulated agents are automatically killed
-    'T_cycle' : 1         # Number of periods in the cycle for this agent type
+    #'AgentCount': 10000,  # Number of agents of this type (only matters for simulation)
+    #'aNrmInitMean' : 0.0, # Mean of log initial assets (only matters for simulation)
+    #'aNrmInitStd' : 1.0,  # Standard deviation of log initial assets (only for simulation)
+    #'pLvlInitMean' : 0.0, # Mean of log initial permanent income (only matters for simulation)
+    #'pLvlInitStd' : 0.0,  # Standard deviation of log initial permanent income (only matters for simulation)
+    #'PermGroFacAgg' : 1.0,# Aggregate permanent income growth factor: portion of PermGroFac attributable to aggregate productivity growth (only matters for simulation)
+    #'T_age' : None,       # Age after which simulated agents are automatically killed
+    #'T_cycle' : 1         # Number of periods in the cycle for this agent type
 }
     
 class GLconsType(AgentType):
    
     
-    def makeOnePeriodOOSolver(solver_class):
-        def onePeriodSolver(**kwds):
-            solver = solver_class(**kwds)
-
-            # not ideal; better if this is defined in all Solver classes
-            if hasattr(solver, "prepareToSolve"):
-                solver.prepareToSolve()
-
-            solution_now = solver.solve()
-            return solution_now
-
-        onePeriodSolver.solver_class = solver_class
-    # This can be revisited once it is possible to export parameters
-        onePeriodSolver.solver_args = getArgNames(solver_class.__init__)[1:]
-
-        return onePeriodSolver
-    
-    
-    
     
 
     def __init__(self, cycles=0, verbose=1, quiet=False, **kwds):
         self.time_vary = []
-        self.time_inv = ["CRRA", "Rfree", "DiscFac", "pssi", "phi"]
+        self.time_inv = ["CRRA", "Rfree", "DiscFac", "phi","eta","nu","pssi","B"]
         self.state_vars = []
         self.shock_vars = []
         cmin= 1e-6  # lower bound on consumption
@@ -319,6 +316,5 @@ class GLconsType(AgentType):
 example = GLconsType(**init_GL)
 example.solve()
 
-        
         
    
