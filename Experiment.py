@@ -187,9 +187,10 @@ class GLsolver(HARKobject):
         Bgrid_uc=datagrid_array[3,1]
     
         #setup grid based on constraint phi
+        phi = 1.60054
         Bgrid=[]
         for i in range(200):
-            if Bgrid_uc[0,i] > self.phi:
+            if Bgrid_uc[0,i] > -phi:
                 Bgrid.append(Bgrid_uc[0,i])
         Bgrid = np.array(Bgrid).reshape(1,len(Bgrid))
         
