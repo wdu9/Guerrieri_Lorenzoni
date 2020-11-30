@@ -14,8 +14,7 @@ from HARK.core import AgentType, NullFunc, HARKobject, makeOnePeriodOOSolver
 from scipy.io import loadmat
 from HARK.interpolation import  LinearInterp
 from copy import copy, deepcopy
-from HARK.utilities import getArgNames, NullFunc
-
+from HARK.utilities import getArgNames, NullFunc, plotFuncs
 
 #------------------------------------------------------------------------------
 
@@ -166,13 +165,11 @@ class GLsolver(HARKobject):
         cldata=list(Matlabcl.items())
         cldata=np.array(cldata)
         cl=cldata[3,1].reshape(13,1)
-        print(cl)
         
         
         Matlabgrid=loadmat('Bgrid')
         griddata=list(Matlabgrid.items())
         datagrid_array=np.array(griddata)
-        print(datagrid_array[3,1])
         Bgrid_uc=datagrid_array[3,1]
     
         #setup grid based on constraint phi
@@ -190,7 +187,6 @@ class GLsolver(HARKobject):
     
         phi= D1_4Y * NE * 2
         expUtil= np.dot(Pr,(Cnext**(-CRRA)))
-        print(expUtil)
         Cnow=[]
         Nnow=[]
         Bnow=[]
@@ -218,7 +214,6 @@ class GLsolver(HARKobject):
         for i in range(13):
             self.Cpol.append(self.Cnowpol[i,0].y_list)
         self.Cpol = np.array(self.Cpol)
-        print(self.Cpol)
         
     
     def solve(self):
@@ -266,7 +261,7 @@ init_GL = {
 class GLconsType(AgentType):
    
     
-    def __init__(self, cycles=0, verbose=1, quiet=False, **kwds):
+    def __init__(self, cycles=1, verbose=1, quiet=False, **kwds):
         self.time_vary = []
         self.time_inv = ["CRRA", "Rfree", "DiscFac", "phi","eta","nu","pssi","B"]
         self.state_vars = []
@@ -282,7 +277,7 @@ class GLconsType(AgentType):
         Matlabgrid=loadmat('Bgrid')
         griddata=list(Matlabgrid.items())
         datagrid_array=np.array(griddata)
-        print(datagrid_array[3,1])
+
         Bgrid_uc=datagrid_array[3,1]
     
         params = init_GL.copy()
@@ -299,7 +294,7 @@ class GLconsType(AgentType):
         self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
 
         #initial Guess for Cpolicy
-        Cguess = np.maximum(self.Rfree*np.ones(13).reshape(13,1).dot(self.Bgrid),cmin)
+        Cguess = np.maximum((self.Rfree-1)*np.ones(13).reshape(13,1).dot(self.Bgrid),cmin)
         
         self.solution_terminal_ = GLConsumerSolution(
                 Cpol=Cguess,
@@ -322,6 +317,7 @@ class GLconsType(AgentType):
 #-------------------------------------------------------------------------------
 example = GLconsType(**init_GL)
 example.solve()
-
+plotFuncs(example.solution[0].cFuncs[2][0], -2, 12)
+plotFuncs(example.solution[1].cFuncs[2][0], -2, 12)
         
    
