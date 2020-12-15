@@ -338,7 +338,7 @@ class GLSolver(ConsIndShockSolver):
         #)
         BNrm=self.Bnow
         print('Bnrm')
-        print(BNrm)
+        print(BNrm[3])
         
 #note later we will need interpolate between bonds and labor
         # Package and return the solution for this period
@@ -365,15 +365,17 @@ class GLSolver(ConsIndShockSolver):
             Corresponding market resource points for interpolation.
         """
         
+        #minimum consumption value for each state
         Matlabcl=loadmat('cl')
         cldata=list(Matlabcl.items())
         cldata=np.array(cldata)
         cl=cldata[3,1].reshape(13,1)
         
+        #import Income Process
         Matlabdict = loadmat('inc_process.mat')
         data = list(Matlabdict.items())
         data_array=np.asarray(data)
-        x=data_array[3,1]
+        x=data_array[3,1] #log productivity
         Pr=data_array[4,1]
         pr = data_array[5,1]
     
@@ -411,19 +413,16 @@ class GLSolver(ConsIndShockSolver):
         facMat = np.diag(fac)
         thetaMat = np.diag(theta)
         
-        Matlabgrid=loadmat('Bgrid')
-        griddata=list(Matlabgrid.items())
-        datagrid_array=np.array(griddata)
-        Bgrid_uc=datagrid_array[3,1]
-        
 
         
+        Bgrid_uc =-2+((np.array(range(0,200))/200)**2)*52
+            
         self.Bgrid=[]
         for i in range(200):
-            if  Bgrid_uc[0,i] > self.BoroCnstArt:
-                self.Bgrid.append(Bgrid_uc[0,i])
+            if  Bgrid_uc[i] > self.BoroCnstArt:
+                self.Bgrid.append(Bgrid_uc[i])
+                    
         self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
-        
         
         self.Bgrid_rep=np.tile(self.Bgrid,(13,1))
         
@@ -432,22 +431,25 @@ class GLSolver(ConsIndShockSolver):
         print('cNrmNow below')
         print(cNrmNow[3])
         
-        Nnow = np.maximum(1-(facMat.dot(cNrmNow**(self.CRRA/self.eta))),0)  
-        Bnow = (self.Bgrid_rep/(self.Rfree)) + cNrmNow - thetaMat.dot(Nnow) - z
+        Nnow = np.maximum(1-(facMat.dot(cNrmNow**(self.CRRA/self.eta))),0)  #labor supply
+        Bnow = (self.Bgrid_rep/(self.Rfree)) + cNrmNow - thetaMat.dot(Nnow) - z # Budget constraint
         
+        #constrained
         for i in range(13):
             if Bnow[i,0] < self.BoroCnstArt:
-                c_c = np.linspace(cl[i,0], cNrmNow[i,0], 10)
+                c_c = np.linspace(cl[i,0], cNrmNow[i,0], 6)
                 n_c = np.maximum(1 - fac[i]*(c_c**(self.CRRA/self.eta)),0)  # labor supply
-                b_c = self.BoroCnstArt/self.Rfree + c_c - theta[i]**n_c - z[i] # budget
-                Bnow[i] = np.concatenate([b_c[0:9], Bnow[i,9:183]])
-                Nnow[i]= np.concatenate([n_c[0:9], Nnow[i,9:183]])
-                cNrmNow[i] = np.concatenate([c_c[0:9], cNrmNow[i,9:183]])
+                b_c = self.BoroCnstArt/self.Rfree + c_c - theta[i]*n_c - z[i] # budget
+                Bnow[i] = np.concatenate([b_c[0:5], Bnow[i,5:183]])
+                Nnow[i]= np.concatenate([n_c[0:5], Nnow[i,5:183]])
+                cNrmNow[i] = np.concatenate([c_c[0:5], cNrmNow[i,5:183]])
       
+        cNrmNow=np.maximum(cNrmNow,cmin)
+        Bnow= np.maximum(Bnow,self.BoroCnstArt)
 
         # Limiting consumption is zero as m approaches mNrmMin
-        c_for_interpolation = np.insert(cNrmNow, 0, 0.0, axis=-1)
-        m_for_interpolation = np.insert(Bnow, 0, self.BoroCnstNat, axis=-1)
+        c_for_interpolation = np.insert(cNrmNow, 0, cmin, axis=-1)
+        m_for_interpolation = np.insert(Bnow, 0,  self.BoroCnstArt, axis=-1)
 
         # Store these for calcvFunc
         self.cNrmNow = cNrmNow
@@ -702,23 +704,15 @@ class GLSolver(ConsIndShockSolver):
             )  # the states for which this minimum applies
             
            
-            # asset grid used in authors' code
-            #aGrid=-2+((np.array(range(0,200))/200)**2)*52
+            Bgrid_uc =-2+((np.array(range(0,200))/200)**2)*52  # asset grid used in authors' code
             
-            Matlabgrid=loadmat('Bgrid')
-            griddata=list(Matlabgrid.items())
-            datagrid_array=np.array(griddata)
-            Bgrid_uc=datagrid_array[3,1]
-        
-
-        
             self.Bgrid=[]
             for i in range(200):
-                if  Bgrid_uc[0,i] > -1.600:
-                    self.Bgrid.append(Bgrid_uc[0,i])
+                if  Bgrid_uc[i] > self.BoroCnstArt:
+                    self.Bgrid.append(Bgrid_uc[i])
                     
             self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
-            aGrid = self.Bgrid
+            aGrid = self.Bgrid #asset grid for this pass
             #aGrid = aNrmMin + self.aXtraGrid # assets grid for this pass
             
             EndOfPrdvP_all = np.zeros((self.StateCount, self.aXtraGrid.size))
@@ -736,11 +730,9 @@ class GLSolver(ConsIndShockSolver):
                         )
             # Weight conditional marginal (marginal) values by transition probs
             # to get unconditional marginal (marginal) value at each gridpoint.
-            #print('endprdvpallbelow')
-            #print(EndOfPrdvP_all[0])
+           
             EndOfPrdvP_temp = np.dot(self.MrkvArray, EndOfPrdvP_all)
-            #print('withmarkarray')
-            #print(EndOfPrdvP_temp)
+          
             
             EndOfPrdvP[which_states, :] = EndOfPrdvP_temp[
                 which_states, :
@@ -1233,10 +1225,6 @@ class MarkovConsumerType(IndShockConsumerType):
                 self.Bgrid.append(Bgrid_uc[0,i])
         self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
         
-        MatlabCpol=loadmat('Cpol')
-        Cpoldata=list(MatlabCpol.items())
-        Cpoldata=np.array(Cpoldata)
-        Cpoldata=Cpoldata[3,1].reshape(13,200)
 
         #initial Guess for Cpolicy
         Cguess = np.maximum((self.Rfree-1).reshape(13,1).dot(self.Bgrid),cmin)
@@ -1600,7 +1588,7 @@ GLDict={
     # Parameters for constructing the "assets above minimum" grid
     "aXtraMin" : .000006,                    # Minimum end-of-period "assets above minimum" value
     "aXtraMax" : 50,                       # Maximum end-of-period "assets above minimum" value
-    "aXtraCount" : 183,                     # Number of points in the base grid of "assets above minimum"
+    "aXtraCount" : 182,                     # Number of points in the base grid of "assets above minimum"
     "aXtraNestFac" : 3,                    # Exponential nesting factor when constructing "assets above minimum" grid
     "aXtraExtra" : [None],                 # Additional values to add to aXtraGrid
 
