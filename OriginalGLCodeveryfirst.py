@@ -37,7 +37,7 @@ from HARK.utilities import getArgNames, NullFunc, plotFuncs
 
 
 
-__all__ = ["GLSolver", "MarkovConsumerType"]
+__all__ = ["GLSolver", "GLConsumerType"]
 
 utility = CRRAutility
 utilityP = CRRAutilityP
@@ -328,10 +328,9 @@ class GLSolver(ConsIndShockSolver):
         )
         
         
-        ###ALOT of changes made just below
         self.getPointsForInterpolationGL(self.EndOfPrdvP, aNrm)
         #cNrm = np.hstack((np.zeros((self.StateCount, 1)), self.cNrmNow))
-        cNrm=self.cNrmNow
+        cNrm=self.cNow
         NNrm = self.Nnow
         #BNrm = np.hstack(
           # (np.reshape(self.mNrmMin_list, (self.StateCount, 1)), self.Bnow)
@@ -340,10 +339,10 @@ class GLSolver(ConsIndShockSolver):
         print('Bnrm')
         print(BNrm[3])
         
-#note later we will need interpolate between bonds and labor
+
         # Package and return the solution for this period
         self.BoroCnstNat = self.BoroCnstNat_list
-        solution = self.makeSolutionGL(cNrm, BNrm,NNrm)
+        solution = self.makeSolutionGL(cNrm, BNrm, NNrm)
         return solution
     
     
@@ -365,25 +364,26 @@ class GLSolver(ConsIndShockSolver):
             Corresponding market resource points for interpolation.
         """
         
-        #minimum consumption value for each state
+        # minimum consumption value for each state
         Matlabcl=loadmat('cl')
         cldata=list(Matlabcl.items())
         cldata=np.array(cldata)
         cl=cldata[3,1].reshape(13,1)
         
-        #import Income Process
+        # import Income Process
         Matlabdict = loadmat('inc_process.mat')
         data = list(Matlabdict.items())
         data_array=np.asarray(data)
         x=data_array[3,1] #log productivity
         Pr=data_array[4,1]
         pr = data_array[5,1]
-    
-        theta = np.concatenate((np.array([1e-100000]).reshape(1,1),np.exp(x).reshape(1,12)),axis=1).reshape(13,)
-        fin   = 0.8820    #job-finding probability
-        sep   = 0.0573    #separation probability
-        cmin= 1e-6  # lower bound on consumption 
         
+        # vector where each element is a level of productivity, The first element is productivity of effectively zero (unemployed)
+        theta = np.concatenate((np.array([1e-100000]).reshape(1,1),np.exp(x).reshape(1,12)),axis=1).reshape(13,)
+        
+        fin   = 0.8820 # job-finding probability
+        sep   = 0.0573 # separation probability
+        cmin= 1e-6     # lower bound on consumption 
         
         
         #constructing transition Matrix
@@ -391,7 +391,7 @@ class GLSolver(ConsIndShockSolver):
         A = np.concatenate((G, fin*pr), axis=1)
         K= sep**np.ones(12).reshape(12,1)
         D=np.concatenate((K,np.multiply((1-sep),Pr)),axis=1)
-        Pr = np.concatenate((A,D))
+        Pr = np.concatenate((A,D)) # Markov Array
         
         
         # find new invariate distribution
@@ -404,61 +404,52 @@ class GLSolver(ConsIndShockSolver):
             pr  = pri
     
         
-        fac = ((self.pssi / theta)** (1/self.eta)).reshape(13,)  
-            
+    
+        fac = ((self.pssi / theta)** (1/self.eta)).reshape(13,)  # parameter for calculating Nnow
         tau = (self.nu*pr[0,0] + (self.Rfree-1)/(self.Rfree)*self.B) / (1 - pr[0,0]) # labor tax
-            
-        z = np.insert(-tau*np.ones(12),0,self.nu).reshape(13,1)
+        z = np.insert(-tau*np.ones(12),0,self.nu).reshape(13,1) # full transfer scheme
         
-        facMat = np.diag(fac)
+        #diagonalize for computational purposes
+        facMat = np.diag(fac) 
         thetaMat = np.diag(theta)
         
-
         
-        Bgrid_uc =-2+((np.array(range(0,200))/200)**2)*52
-            
-        self.Bgrid=[]
-        for i in range(200):
-            if  Bgrid_uc[i] > self.BoroCnstArt:
-                self.Bgrid.append(Bgrid_uc[i])
-                    
-        self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
+        
         
         self.Bgrid_rep=np.tile(self.Bgrid,(13,1))
-        
        
-        cNrmNow = self.uPinv(EndOfPrdvP)
-        print('cNrmNow below')
-        print(cNrmNow[3])
+        #Endogenous Gridpoints Method
+        cNow = self.uPinv(EndOfPrdvP) #FOC for consumption
+        Nnow = np.maximum(1-(facMat.dot(cNow**(self.CRRA/self.eta))),0)  #labor supply FOC
+        Bnow = (self.Bgrid_rep/(self.Rfree)) + cNow - thetaMat.dot(Nnow) - z # Budget constraint
         
-        Nnow = np.maximum(1-(facMat.dot(cNrmNow**(self.CRRA/self.eta))),0)  #labor supply
-        Bnow = (self.Bgrid_rep/(self.Rfree)) + cNrmNow - thetaMat.dot(Nnow) - z # Budget constraint
-        
-        #constrained
+        #Constrained
         for i in range(13):
             if Bnow[i,0] < self.BoroCnstArt:
-                c_c = np.linspace(cl[i,0], cNrmNow[i,0], 6)
+                c_c = np.linspace(cl[i,0], cNow[i,0], 6) 
                 n_c = np.maximum(1 - fac[i]*(c_c**(self.CRRA/self.eta)),0)  # labor supply
                 b_c = self.BoroCnstArt/self.Rfree + c_c - theta[i]*n_c - z[i] # budget
                 Bnow[i] = np.concatenate([b_c[0:5], Bnow[i,5:183]])
                 Nnow[i]= np.concatenate([n_c[0:5], Nnow[i,5:183]])
-                cNrmNow[i] = np.concatenate([c_c[0:5], cNrmNow[i,5:183]])
+                cNow[i] = np.concatenate([c_c[0:5], cNow[i,5:183]])
       
-        cNrmNow=np.maximum(cNrmNow,cmin)
-        Bnow= np.maximum(Bnow,self.BoroCnstArt)
+        cNow=np.maximum(cNow,cmin)
 
         # Limiting consumption is zero as m approaches mNrmMin
-        c_for_interpolation = np.insert(cNrmNow, 0, cmin, axis=-1)
+        c_for_interpolation = np.insert(cNow, 0, cmin, axis=-1)
         m_for_interpolation = np.insert(Bnow, 0,  self.BoroCnstArt, axis=-1)
 
-        # Store these for calcvFunc
-        self.cNrmNow = cNrmNow
+        # Storage
+        self.cNow = cNow
         self.Nnow = Nnow 
         self.Bnow = Bnow
+        
+        
 
         return c_for_interpolation, m_for_interpolation
 
     def defBoundary(self):
+        
         """
         Find the borrowing constraint for each current state and save it as an
         attribute of self for use by other methods.
@@ -471,17 +462,20 @@ class GLSolver(ConsIndShockSolver):
         -------
         none
         """
+        
         self.BoroCnstNatAll = np.zeros(self.StateCount) + np.nan
         # Find the natural borrowing constraint conditional on next period's state
         for j in range(self.StateCount):
             PermShkMinNext = np.min(self.IncomeDstn_list[j].X[0])
             TranShkMinNext = np.min(self.IncomeDstn_list[j].X[1])
+            
+            
             self.BoroCnstNatAll[j] = (
-                (self.solution_next.mNrmMin[j] - TranShkMinNext)
+                (self.solution_next.mNrmMin[j] - TranShkMinNext - .1670 ) # .1670 = z[0]: the level of unemployment benefits
                 * (self.PermGroFac_list[j] * PermShkMinNext)
                 / self.Rfree_list[j]
             )
-
+            
         self.BoroCnstNat_list = np.zeros(self.StateCount) + np.nan
         self.mNrmMin_list = np.zeros(self.StateCount) + np.nan
         self.BoroCnstDependency = np.zeros((self.StateCount, self.StateCount)) + np.nan
@@ -497,7 +491,7 @@ class GLSolver(ConsIndShockSolver):
                 self.mNrmMin_list[i] = self.BoroCnstNat_list[i]
             else:
                 self.mNrmMin_list[i] = np.max(
-                    [-2, self.BoroCnstArt]#[self.BoroCnstNat_list[i], self.BoroCnstArt]
+                    [self.BoroCnstNat_list[i], self.BoroCnstArt]
                 )
             self.BoroCnstDependency[i, :] = (
                 self.BoroCnstNat_list[i] == self.BoroCnstNatAll
@@ -703,9 +697,8 @@ class GLSolver(ConsIndShockSolver):
                 state_inverse == k
             )  # the states for which this minimum applies
             
-           
-            Bgrid_uc =-2+((np.array(range(0,200))/200)**2)*52  # asset grid used in authors' code
-            
+           # Construct Asset Grid 
+            Bgrid_uc = -2+((np.array(range(0,200))/200)**2)*52  # asset grid used in authors' code
             self.Bgrid=[]
             for i in range(200):
                 if  Bgrid_uc[i] > self.BoroCnstArt:
@@ -832,7 +825,7 @@ class GLSolver(ConsIndShockSolver):
         )  # An empty solution to which we'll add state-conditional solutions
         # Calculate the MPC at each market resource gridpoint in each state (if desired)
         if self.CubicBool:
-            dcda = self.EndOfPrdvPP / self.uPP(np.array(self.cNrmNow))
+            dcda = self.EndOfPrdvPP / self.uPP(np.array(self.cNow))
             MPC = dcda / (dcda + 1.0)
             self.MPC_temp = np.hstack(
                 (np.reshape(self.MPCmaxNow, (self.StateCount, 1)), MPC)
@@ -853,6 +846,7 @@ class GLSolver(ConsIndShockSolver):
             self.cFuncNowCnst = LinearInterp(
                 [self.mNrmMin_list[i], self.mNrmMin_list[i] + 1.0], [0.0, 1.0]
             )
+            
             cFuncNowUnc = interpfunc(BNrm[i, :], cNrm[i, :])
             cFuncNow = LowerEnvelope(cFuncNowUnc, self.cFuncNowCnst)
             
@@ -1094,7 +1088,7 @@ def _solveGL(
 ####################################################################################################
 
 
-class MarkovConsumerType(IndShockConsumerType):
+class GLConsumerType(IndShockConsumerType):
     """
     An agent in the Markov consumption-saving model.  His problem is defined by a sequence
     of income distributions, survival probabilities, discount factors, and permanent
@@ -1209,26 +1203,21 @@ class MarkovConsumerType(IndShockConsumerType):
         none
         """
         IndShockConsumerType.updateSolutionTerminal(self)
-
-        cmin= 1e-6  # lower bound on consumption
         
-         
+        cmin= 1e-6  # lower bound on consumption
 
-        Matlabgrid=loadmat('Bgrid')
-        griddata=list(Matlabgrid.items())
-        datagrid_array=np.array(griddata)
-        Bgrid_uc=datagrid_array[3,1]
-    
+        Bgrid_uc = -2+((np.array(range(0,200))/200)**2)*52  # asset grid used in authors' code
+        # Reconstruct asset grid without asset levels below borrowing constraint 
         self.Bgrid=[]
         for i in range(200):
-            if  Bgrid_uc[0,i] > self.BoroCnstArt:
-                self.Bgrid.append(Bgrid_uc[0,i])
+            if  Bgrid_uc[i] > self.BoroCnstArt:
+                self.Bgrid.append(Bgrid_uc[i])
         self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
-        
+  
 
         #initial Guess for Cpolicy
         Cguess = np.maximum((self.Rfree-1).reshape(13,1).dot(self.Bgrid),cmin)
-
+        #Construct terminal consumption function and accompanying Marg Value Func
         self.CfuncGuess = LinearInterp(self.Bgrid,Cguess[0])
         self.vPFuncGuess=MargValueFunc(self.CfuncGuess,self.CRRA)
 
@@ -1239,9 +1228,7 @@ class MarkovConsumerType(IndShockConsumerType):
         self.solution_terminal.vFunc = StateCount * [self.solution_terminal.vFunc]
         self.solution_terminal.vPfunc = StateCount * [ self.vPFuncGuess]
         self.solution_terminal.vPPfunc = StateCount * [self.solution_terminal.vPPfunc]
-        
         self.solution_terminal.mNrmMin = np.ones(StateCount)*(-2)
-        
         self.solution_terminal.hRto = np.zeros(StateCount)
         self.solution_terminal.MPCmax = np.ones(StateCount)
         self.solution_terminal.MPCmin = np.ones(StateCount)
@@ -1474,7 +1461,7 @@ class MarkovConsumerType(IndShockConsumerType):
         -------
         None
         """
-        cNrmNow = np.zeros(self.AgentCount) + np.nan
+        cNow = np.zeros(self.AgentCount) + np.nan
         MPCnow = np.zeros(self.AgentCount) + np.nan
         J = self.MrkvArray[0].shape[0]
 
@@ -1486,10 +1473,10 @@ class MarkovConsumerType(IndShockConsumerType):
             right_t = t == self.t_cycle
             for j in range(J):
                 these = np.logical_and(right_t, MrkvBoolArray[j, :])
-                cNrmNow[these], MPCnow[these] = (
+                cNow[these], MPCnow[these] = (
                     self.solution[t].cFunc[j].eval_with_derivative(self.state_now['mNrmNow'][these])
                 )
-        self.controls["cNrmNow"] = cNrmNow
+        self.controls["cNow"] = cNow
         self.MPCnow = MPCnow
 
     def calcBoundingValues(self):
@@ -1568,27 +1555,27 @@ Pr1 = np.concatenate((A,D))
 GLDict={
     # Parameters shared with the perfect foresight model
     "CRRA": 4.0,                           # Coefficient of relative risk aversion
-    "Rfree": 1.00625*np.ones(13),                         # Interest factor on assets
-    "DiscFac": 0.8**(1/4),                       # Intertemporal discount factor
-    "LivPrb" : [1.00*np.ones(13)],                     # Survival probability
-    "PermGroFac" :[1.00*np.ones(13)],                  # Permanent income growth factor
+    "Rfree": 1.00625*np.ones(13),          # Interest factor on assets
+    "DiscFac": .9457,                      # Intertemporal discount factor
+    "LivPrb" : [1.00*np.ones(13)],         # Survival probability
+    "PermGroFac" :[1.00*np.ones(13)],      # Permanent income growth factor
 
     # Parameters that specify the income distribution over the lifecycle
     "PermShkStd" : [0.0],                  # Standard deviation of log permanent shocks to income
     "PermShkCount" : 1,                    # Number of points in discrete approximation to permanent income shocks
     "TranShkStd" : [0.0],                  # Standard deviation of log transitory shocks to income
     "TranShkCount" : 1,                    # Number of points in discrete approximation to transitory income shocks
-    "UnempPrb" : 0,                     # Probability of unemployment while working
-    "IncUnemp" : 0,                      # Unemployment benefits replacement rate
-    "UnempPrbRet" : 0,                # Probability of "unemployment" while retired
-    "IncUnempRet" : 0,                   # "Unemployment" benefits when retired
+    "UnempPrb" : 0,                        # Probability of unemployment while working
+    "IncUnemp" : 0,                        # Unemployment benefits replacement rate
+    "UnempPrbRet" : 0,                     # Probability of "unemployment" while retired
+    "IncUnempRet" : 0,                     # "Unemployment" benefits when retired
     "T_retire" : 0,                        # Period of retirement (0 --> no retirement)
     "tax_rate" : 0.0,                      # Flat income tax rate (legacy parameter, will be removed in future)
 
     # Parameters for constructing the "assets above minimum" grid
-    "aXtraMin" : .000006,                    # Minimum end-of-period "assets above minimum" value
+    "aXtraMin" : .000006,                  # Minimum end-of-period "assets above minimum" value
     "aXtraMax" : 50,                       # Maximum end-of-period "assets above minimum" value
-    "aXtraCount" : 182,                     # Number of points in the base grid of "assets above minimum"
+    "aXtraCount" : 182,                    # Number of points in the base grid of "assets above minimum"
     "aXtraNestFac" : 3,                    # Exponential nesting factor when constructing "assets above minimum" grid
     "aXtraExtra" : [None],                 # Additional values to add to aXtraGrid
 
@@ -1609,21 +1596,28 @@ GLDict={
     "T_age" : None,                        # Age after which simulated agents are automatically killed
     
     #Added dict Params
-    "MrkvArray" : [Pr1],
-    'eta': 1.5,
-    'nu': 0.16,
-    'pssi': 18.154609,
-    'B': 2.56,
+    "MrkvArray" : [Pr1],                   # Markov Transition Matrix
+    'eta': 1.5,                            # Curvature of utility from leisure
+    'nu': 0.16,                            # UI benefits
+    'pssi': 18.154609,                     # Disutility from labor as if representative agent
+    'B': 2.56,                             # Bond Supply
 }
 
 #------------------------------------------------------------------------------
 
 IncomeDstnReg = DiscreteDistribution(np.ones(1), [np.ones(1), np.zeros(1)]) 
 IncomeDstn = 13*[IncomeDstnReg]
-example = MarkovConsumerType(**GLDict)
-example.IncomeDstn = [IncomeDstn]
-example.solve()
-plotFuncs(example.solution[0].cFunc[1:12], -4, 12)
-plotFuncs(example.solution[0].LFunc[0:12], -4, 12)
+GLexample = GLConsumerType(**GLDict)
+GLexample.IncomeDstn = [IncomeDstn]
+GLexample.solve()
+plotFuncs(GLexample.solution[0].cFunc[1:12], -2, 12)
+plotFuncs(GLexample.solution[0].LFunc[1:12],-2, 12)
 
+
+plotFuncs([GLexample.solution[0].cFunc[1],
+           GLexample.solution[0].cFunc[7]
+           ], -2, 12)
+plotFuncs([GLexample.solution[0].LFunc[1],
+           GLexample.solution[0].LFunc[7]
+           ], -2, 12)
 
