@@ -1,31 +1,14 @@
 
-"""
-base: Python 3.7.3
-Authors: William Du and Tung Sheng Hsieh
-"""
-
-
-
-
-"""
-Classes to solve and simulate consumption-savings model with a discrete, exogenous,
-stochastic Markov state.  The only solver here extends ConsIndShockModel to
-include a Markov state; the interest factor, permanent growth factor, and income
-distribution can vary with the discrete state.
-"""
-
 
 from __future__ import division, print_function
 from __future__ import absolute_import
 from builtins import range
-from copy import deepcopy
 import numpy as np
 from HARK.core import AgentType, HARKobject
 from HARK.ConsumptionSaving.ConsIndShockModel import (
     ConsIndShockSolver,
     ValueFunc,
     MargValueFunc,
-    #ConsumerSolution,
     IndShockConsumerType,
     PerfForesightConsumerType,
 )
@@ -42,7 +25,54 @@ from HARK.utilities import (
     CRRAutilityP_invP,
 )
 from scipy.io import loadmat
-from HARK.utilities import getArgNames, NullFunc, plotFuncs
+from HARK.utilities import  NullFunc, plotFuncs
+
+
+"""
+Authors: William Du and Tung-Sheng Hsieh
+
+base: Python 3.7.3
+
+This code is an alteration of ConsMarkovModel.Py 
+
+The version of the ConsMarkovModel.Py used was last updated October 21st 2020
+
+Note** GL denotes Guerrieri Lorenzoni
+
+
+There are three main classes in this code:
+    
+    GLConsumerSolution is the usual Consumer Solution with the addition of the labor supply function.
+    - appendSolution
+    
+    GLSolver solves a single period of the consumption-labor-saving problem with stochastic transition between discrete states.
+    - defBoundaryGL
+    - calcEndOfPrdvPGL
+    - getPointsForInterpolationGL
+    - makeSolutionGL
+    
+    GLConsumerType represents the agent in the consumption-labor-saving model.
+    - updateSolutionTerminal
+    
+Underneath each class are the functions that were edited. If a function in the original ConMarkovModel.py was edited,
+then it will likely have a GL at its name. 
+    
+"""
+
+
+
+
+
+
+
+
+"""
+Classes to solve and simulate consumption-savings model with a discrete, exogenous,
+stochastic Markov state.  The only solver here extends ConsIndShockModel to
+include a Markov state; the interest factor, permanent growth factor, and income
+distribution can vary with the discrete state.
+"""
+
 
 
 
@@ -242,7 +272,17 @@ class GLSolver(ConsIndShockSolver):
         CubicBool: boolean
             An indicator for whether the solver should use cubic or linear inter-
             polation.
-
+        eta : float
+           Coefficient for the Curvature of utility from leisure
+        nu : float
+            UI benefits
+        pssi : float
+            Disutility from labor as if representative agent
+        B : float
+            Bond Supply
+        
+            
+    
         Returns
         -------
         None
@@ -281,9 +321,9 @@ class GLSolver(ConsIndShockSolver):
         Returns
         -------
         solution : ConsumerSolution
-            The solution to the single period consumption-saving problem. Includes
-            a consumption function cFunc (using cubic or linear splines), a marg-
-            inal value function vPfunc, a minimum acceptable level of normalized
+            The solution to the single period consumption-labor-saving problem. Includes
+            a consumption function cFunc (using cubic or linear splines), a labor supply function,
+            a marginal value function vPfunc, a minimum acceptable level of normalized
             market resources mNrmMin, normalized human wealth hNrm, and bounding
             MPCs MPCmin and MPCmax.  It might also have a value function vFunc
             and marginal marginal value function vPPfunc.  All of these attributes
@@ -292,7 +332,7 @@ class GLSolver(ConsIndShockSolver):
             when in the i=0 Markov state this period.
         """
         # Find the natural borrowing constraint in each current state
-        self.defBoundary()
+        self.defBoundaryGL()
 
         # Initialize end-of-period (marginal) value functions
         self.EndOfPrdvFunc_list = []
@@ -327,7 +367,7 @@ class GLSolver(ConsIndShockSolver):
 
         # EndOfPrdvP_cond is EndOfPrdvP conditional on *next* period's state.
         # Take expectations to get EndOfPrdvP conditional on *this* period's state.
-        self.calcEndOfPrdvP()
+        self.calcEndOfPrdvPGL()
 
         # Calculate the bounding MPCs and PDV of human wealth for each state
         self.calcHumWealthAndBoundingMPCs()
@@ -339,22 +379,11 @@ class GLSolver(ConsIndShockSolver):
             + np.array(self.BoroCnstNat_list)[:, np.newaxis]
         )
         
-        
         self.getPointsForInterpolationGL(self.EndOfPrdvP, aNrm)
-        #cNrm = np.hstack((np.zeros((self.StateCount, 1)), self.cNrmNow))
-        cNrm=self.cNow
-        NNrm = self.Nnow
-        #BNrm = np.hstack(
-          # (np.reshape(self.mNrmMin_list, (self.StateCount, 1)), self.Bnow)
-        #)
-        BNrm=self.Bnow
-        print('Bnrm')
-        print(BNrm[3])
         
-
         # Package and return the solution for this period
         self.BoroCnstNat = self.BoroCnstNat_list
-        solution = self.makeSolutionGL(cNrm, BNrm, NNrm)
+        solution = self.makeSolutionGL(self.cNow, self.Bnow, self.Nnow)
         return solution
     
     
@@ -376,6 +405,8 @@ class GLSolver(ConsIndShockSolver):
             Corresponding market resource points for interpolation.
         """
         
+        print('This code should take 15 seconds ')
+
         # minimum consumption value for each state
         Matlabcl=loadmat('cl')
         cldata=list(Matlabcl.items())
@@ -458,7 +489,7 @@ class GLSolver(ConsIndShockSolver):
 
         return c_for_interpolation, m_for_interpolation
 
-    def defBoundary(self):
+    def defBoundaryGL(self):
         
         """
         Find the borrowing constraint for each current state and save it as an
@@ -673,7 +704,7 @@ class GLSolver(ConsIndShockSolver):
         )  # "recurve" the interpolated marginal value function
         return EndofPrdvPfunc_cond
 
-    def calcEndOfPrdvP(self):
+    def calcEndOfPrdvPGL(self):
         """
         Calculates end of period marginal value (and marginal marginal) value
         at each aXtra gridpoint for each current state, unconditional on the
@@ -716,6 +747,7 @@ class GLSolver(ConsIndShockSolver):
                     
             self.Bgrid = np.array(self.Bgrid).reshape(1,len(self.Bgrid))
             aGrid = self.Bgrid #asset grid for this pass
+            
             #aGrid = aNrmMin + self.aXtraGrid # assets grid for this pass
             
             EndOfPrdvP_all = np.zeros((self.StateCount, self.aXtraGrid.size))
@@ -1211,6 +1243,7 @@ class GLConsumerType(IndShockConsumerType):
         -------
         none
         """
+        
         IndShockConsumerType.updateSolutionTerminal(self)
         
         cmin= 1e-6  # lower bound on consumption
@@ -1218,7 +1251,7 @@ class GLConsumerType(IndShockConsumerType):
 
         Bgrid_uc = -2+((np.array(range(0,200))/200)**2)*52 # asset grid used in authors' code
         
-        # Reconstruct asset grid without asset levels below borrowing constraint 
+        # Cut out asset levels below borrowing constraint
         self.Bgrid=[]
         for i in range(200):
             if  Bgrid_uc[i] > self.BoroCnstArt:
@@ -1228,6 +1261,7 @@ class GLConsumerType(IndShockConsumerType):
 
         #initial Guess for Cpolicy
         Cguess = np.maximum((self.Rfree-1).reshape(13,1).dot(self.Bgrid),cmin)
+        
         #Construct terminal consumption function and accompanying Marg Value Func
         self.CfuncGuess = LinearInterp(self.Bgrid,Cguess[0])
         self.vPFuncGuess=MargValueFunc(self.CfuncGuess,self.CRRA)
@@ -1542,6 +1576,8 @@ class GLConsumerType(IndShockConsumerType):
 
 
 
+
+#load income process to construct transition matrix
 Matlabdict = loadmat('inc_process.mat')
 data = list(Matlabdict.items())
 data_array=np.asarray(data)
@@ -1556,7 +1592,7 @@ cmin= 1e-6  # lower bound on consumption
         
         
         
-#constructing transition Matrix
+#constructing transition Matrix for Dictionary
 G=np.array([1-fin]).reshape(1,1)
 A = np.concatenate((G, fin*pr), axis=1)
 K= sep**np.ones(12).reshape(12,1)
@@ -1618,9 +1654,11 @@ GLDict={
 
 IncomeDstnReg = DiscreteDistribution(np.ones(1), [np.ones(1), np.zeros(1)]) 
 IncomeDstn = 13*[IncomeDstnReg]
+
 GLexample = GLConsumerType(**GLDict)
 GLexample.IncomeDstn = [IncomeDstn]
 GLexample.solve()
+
 plotFuncs(GLexample.solution[0].cFunc[1:12], -2, 12)
 plotFuncs(GLexample.solution[0].LFunc[1:12],-2, 12)
 
