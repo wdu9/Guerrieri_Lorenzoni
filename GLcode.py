@@ -64,8 +64,6 @@ then it will likely have a GL at its name.
 
 
 
-
-
 """
 Classes to solve and simulate consumption-savings model with a discrete, exogenous,
 stochastic Markov state.  The only solver here extends ConsIndShockModel to
@@ -405,8 +403,6 @@ class GLSolver(ConsIndShockSolver):
             Corresponding market resource points for interpolation.
         """
         
-        print('This code should take 15 seconds ')
-
         # minimum consumption value for each state
         Matlabcl=loadmat('cl')
         cldata=list(Matlabcl.items())
@@ -458,7 +454,7 @@ class GLSolver(ConsIndShockSolver):
         
         
         self.Bgrid_rep=np.tile(self.Bgrid,(13,1))
-       
+              
         #Endogenous Gridpoints Method
         cNow = self.uPinv(EndOfPrdvP) #FOC for consumption
         Nnow = np.maximum(1-(facMat.dot(cNow**(self.CRRA/self.eta))),0)  #labor supply FOC
@@ -1149,7 +1145,7 @@ class GLConsumerType(IndShockConsumerType):
     state_vars = IndShockConsumerType.state_vars + ["MrkvNow"]
 
     def __init__(self, cycles=0, **kwds):
-        IndShockConsumerType.__init__(self, cycles=200, **kwds)
+        IndShockConsumerType.__init__(self, cycles=100, **kwds)
         self.solveOnePeriod = _solveGL
 
 
@@ -1243,6 +1239,8 @@ class GLConsumerType(IndShockConsumerType):
         -------
         none
         """
+        print('This code should take 8 seconds ')
+
         
         IndShockConsumerType.updateSolutionTerminal(self)
         
@@ -1659,7 +1657,9 @@ GLexample = GLConsumerType(**GLDict)
 GLexample.IncomeDstn = [IncomeDstn]
 GLexample.solve()
 
+
 plotFuncs(GLexample.solution[0].cFunc[1:12], -2, 12)
+
 plotFuncs(GLexample.solution[0].LFunc[1:12],-2, 12)
 
 
